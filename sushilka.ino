@@ -15,14 +15,8 @@ Encoder enc(CLK, DT, SW);          // Инициализация энкодер�
 DHT dht(DHTPIN, DHTTYPE);          // Инициация датчика влажности/температуры
 
 int count = 0;                     // значение счетчика
-
-int lowTemp = 40;
-int middleTemp = 60;
-int highTemp = 80;
-
-int lowCooler = 40;
-int middleCooler = 60;
-int highCooler = 80;
+int temp;
+int cooler;
 
 byte degree[8] =                    // кодируем символ градуса
 {
@@ -35,10 +29,16 @@ byte degree[8] =                    // кодируем символ граду�
   B00000,
 };    
  
-LiquidCrystal_I2C lcd(0x27,16,2);   // Задаем адрес и размерность дисплея
+LiquidCrystal_I2C lcd(0x27, 20, 4);   // Задаем адрес и размерность дисплея
+
+volatile int counter = 0;   // счётчик
+volatile bool encFlag = 0;  // флаг поворота
 
 void setup() {
   Serial.begin(9600);
+
+  attachInterrupt(0, encIsr, CHANGE);
+  attachInterrupt(1, encIsr, CHANGE);
 
   enc.setType(TYPE2);
   enc.setTickMode(AUTO);
@@ -47,49 +47,90 @@ void setup() {
 
   lcd.init();                       // Инициализация lcd             
   lcd.backlight();                  // Включаем подсветку
-  lcd.createChar(1, degree);        // Создаем символ под номером 1
+  lcd.createChar(1, degree);        // Создаем символ под номером 
+  
+  lcd.setCursor(0, 0);              // Устанавливаем курсор в начало 1 строки
+  lcd.print("Program: ");           // Выводим текст "Programm"
+  lcd.setCursor(0, 2);              // Устанавливаем курсор в начало 1 строки
+  lcd.print("Temp =     \1C ");     // Выводим текст, \1 - значок градуса
+  lcd.setCursor(0, 3);              // Устанавливаем курсор в начало 1 строки
+  lcd.print("Hum  =      % ");      // Выводим текст
+  lcd.setCursor(9, 0);              // Устанавливаем курсор в начало 1 строкe, 10 символ
+  lcd.print("LOW");                 // Выводим дефолтное название программы - LOW
+  lcd.setCursor(0, 1);              // Устанавливаем курсор в начало 1 строкe, 10 символ
+  lcd.print("Time: ");              // Выводим дефолтное название программы - LOW
 }
 
 void loop() {
-  enc.tick();  
+  // enc.tick();
 
-  if (enc.isTurn()) {
-    if (enc.isRight()) count++;
-    if (enc.isLeft()) count--;
-    Serial.println(count);
-  }
-
-  if (enc.isClick()) Serial.println("click");
-
-  //float h = dht.readHumidity(); //Измеряем влажность
-  //float t = dht.readTemperature(); //Измеряем температуру
-  //if (isnan(h) || isnan(t)) {  // Проверка. Если не удается считать показания, выводится «Ошибка считывания», и программа завершает работу
-    //Serial.println("Ошибка считывания");
-    //return;
-  //}
-
-  //Serial.print("Влажность: ");
-  //Serial.print(h);
-  //Serial.print(" %\t");
-  //Serial.print("Температура: ");
-  //Serial.print(t);
-  //Serial.println(" *C "); //Вывод показателей на экран 
+  // if (encFlag) {
+    //Serial.println(counter);
+    // encFlag = 0;
+  // }
 
   // Считывание данных температуры занимает около 250 milliseconds!
   // Показания датчика также могут быть "устаревшими" на 2 секунды (это очень медленный датчик)
   float h = dht.readHumidity();
   // Read temperature as Celsius
-  float t = dht.readTemperature();
-  // Read temperature as Fahrenheit
-  float f = dht.readTemperature(true);
-  
-  // Выводим показания влажности и температуры
-  lcd.setCursor(0, 0);            // Устанавливаем курсор в начало 1 строки
-  lcd.print("Hum  =     % ");     // Выводим текст
-  lcd.setCursor(7, 0);            // Устанавливаем курсор на 7 символ
-  lcd.print(h, 1);                // Выводим на экран значение влажности
-  lcd.setCursor(0, 1);            // Устанавливаем курсор в начало 2 строки
-  lcd.print("Temp =     \1C ");   // Выводим текст, \1 - значок градуса
-  lcd.setCursor(7, 1);            // Устанавливаем курсор на 7 символ 
-  lcd.print(t,1);                 // Выводим значение температуры
+  float t = dht.readTemperature();  
+
+  // if (enc.isTurn()) {
+    //if (count < 0) count = 0;
+    //if (count >= 2) count = 2;
+
+    //if (enc.isRight()) count++;
+    //if (enc.isLeft()) count--;    
+  // }
+
+  // if (enc.isClick()) Serial.println("click");
+  // if (enc.isHolded()) Serial.println("holded");  
+
+  if (count == 0) {
+    String str = "LOW     ";
+    temp = 0;
+    cooler = 33;
+    startProgramm(temp, cooler, str);
+
+  } else if (count == 1) {
+    String str = "MIDDLE";
+    temp = 40;
+    cooler = 66;
+    startProgramm(temp, cooler, str);
+
+  } else if (count == 2) {
+    String str = "HIGH  ";
+    temp = 60;
+    cooler = 99;
+    startProgramm(temp, cooler, str);
+  }
+
+  outPutTempHum(t,h);
 }
+
+void startProgramm(int temp, int cooller, String str) {
+  lcd.setCursor(9, 0);              // Устанавливаем курсор в начало 1 строкe, 10 символ
+  lcd.print(str);                  // Выводим название программы
+}
+
+void outPutTempHum(float t, float h) {
+  lcd.setCursor(7, 2);              // Устанавливаем курсор в начало 3 строкe, 8 символ
+  lcd.print(t,1);                   // Выводим значение температуры
+  lcd.setCursor(7, 3);              // Устанавливаем курсор в начало 4 строкe, 8 символ
+  lcd.print(h,1);                   // Выводим значение влажности
+}
+
+// volatile byte reset = 0, last = 0;
+// void encIsr() {  
+//   byte state = (PIND & 0b1100) >> 2;  // D2 + D3
+//   Serial.println(state);
+//   if (reset && state == 0b11) {
+//     int prevCount = counter;
+//     if (last == 0b10) counter++;
+//     else if (last == 0b01) counter--;
+//     if (prevCount != counter) encFlag = 1;    
+//     reset = 0;
+//   }
+//   if (!state) reset = 1;
+//   last = state;
+// }
